@@ -1,0 +1,10 @@
+{
+  "src": [
+    "pages/Index",
+    "pages/ShareConfirmPage",
+    "pages/PrototypeATestPage",
+    "pages/PrototypeBTestPage",
+    "pages/PrototypeCTestPage",
+    "pages/TestLogPage"
+  ]
+}

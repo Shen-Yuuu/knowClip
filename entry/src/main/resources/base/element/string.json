@@ -1,0 +1,24 @@
+{
+  "string": [
+    {
+      "name": "module_desc",
+      "value": "module description"
+    },
+    {
+      "name": "EntryAbility_desc",
+      "value": "description"
+    },
+    {
+      "name": "EntryAbility_label",
+      "value": "label"
+    },
+    {
+      "name": "ShareExtAbility_label",
+      "value": "知微"
+    },
+    {
+      "name": "permission_read_media",
+      "value": "需要访问您的图片和视频，以便保存分享内容"
+    }
+  ]
+}

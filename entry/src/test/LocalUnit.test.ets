@@ -1,5 +1,6 @@
 import { describe, beforeAll, beforeEach, afterEach, afterAll, it, expect } from '@ohos/hypium';
 import { ShareDataParser } from '../main/ets/services/ShareDataParser';
+import { PrototypeALog } from '../main/ets/utils/PrototypeALog';
 
 export default function localUnitTest() {
   describe('localUnitTest', () => {
@@ -64,6 +65,12 @@ export default function localUnitTest() {
       const result = parser.parse([], 'file://gallery/fallback.jpg');
       expect(result.images.length).assertEqual(1);
       expect(result.images[0]).assertEqual('file://gallery/fallback.jpg');
+    });
+
+    it('redactSharedUriAsScheme', 0, () => {
+      expect(PrototypeALog.uriScheme(undefined)).assertEqual('none');
+      expect(PrototypeALog.uriScheme('file://media/a.jpg')).assertEqual('file');
+      expect(PrototypeALog.uriScheme('media/Photo/a.jpg')).assertEqual('relative');
     });
   });
 }

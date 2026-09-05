@@ -1,7 +1,7 @@
 import { fileIo } from '@kit.CoreFileKit';
 import { common } from '@kit.AbilityKit';
-import { Logger } from '../utils/Logger';
 import { CopyResult } from '../models/ShareData';
+import { PrototypeALog } from '../utils/PrototypeALog';
 
 const TAG = 'FileService';
 
@@ -20,8 +20,11 @@ export class FileService {
    */
   async copyImageToPrivate(uri: string): Promise<CopyResult> {
     const startTime = Date.now();
+    let phase = '准备目标';
     let sourceFile: fileIo.File | null = null;
     let targetFile: fileIo.File | null = null;
+    PrototypeALog.info(TAG, '文件复制',
+      `single start uriScheme=${PrototypeALog.uriScheme(uri)}`);
 
     try {
       // 生成目标路径
@@ -34,22 +37,32 @@ export class FileService {
 
       // 确保目录存在
       await this.ensureDirectory(targetDir);
+      PrototypeALog.info(TAG, '文件复制', 'target directory ready');
 
       // 复制文件
-      Logger.info(TAG, `Copying shared image to ${targetPath}`);
+      phase = '打开源文件';
       sourceFile = await fileIo.open(uri, fileIo.OpenMode.READ_ONLY);
+      PrototypeALog.info(TAG, '文件复制', 'source opened');
+
+      phase = '打开目标文件';
       targetFile = await fileIo.open(targetPath,
         fileIo.OpenMode.CREATE | fileIo.OpenMode.READ_WRITE | fileIo.OpenMode.TRUNC);
+      PrototypeALog.info(TAG, '文件复制', 'target opened');
+
+      phase = '复制文件内容';
       await fileIo.copyFile(sourceFile.fd, targetFile.fd);
+      PrototypeALog.info(TAG, '文件复制', 'copyFile completed');
 
       // 验证文件是否复制成功
+      phase = '校验文件';
       const stat = await fileIo.stat(targetPath);
       if (stat.size === 0) {
         throw new Error('Copied file is empty');
       }
 
       const duration = Date.now() - startTime;
-      Logger.info(TAG, `Copy success: ${targetPath}, size: ${stat.size}, duration: ${duration}ms`);
+      PrototypeALog.info(TAG, '文件复制',
+        `single success size=${stat.size}, duration=${duration}ms`);
 
       return {
         success: true,
@@ -60,7 +73,9 @@ export class FileService {
     } catch (error) {
       const duration = Date.now() - startTime;
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      Logger.error(TAG, `Copy failed after ${duration}ms: ${errorMessage}`);
+      const errorName = error instanceof Error ? error.name : 'UnknownError';
+      PrototypeALog.error(TAG, '文件复制',
+        `single failed phase=${phase}, errorType=${errorName}, duration=${duration}ms`);
 
       return {
         success: false,
@@ -71,15 +86,17 @@ export class FileService {
       if (targetFile !== null) {
         try {
           fileIo.closeSync(targetFile);
+          PrototypeALog.info(TAG, '资源释放', 'target file closed');
         } catch {
-          Logger.warn(TAG, 'Failed to close target image file');
+          PrototypeALog.warn(TAG, '资源释放', 'target file close failed');
         }
       }
       if (sourceFile !== null) {
         try {
           fileIo.closeSync(sourceFile);
+          PrototypeALog.info(TAG, '资源释放', 'source file closed');
         } catch {
-          Logger.warn(TAG, 'Failed to close shared image file');
+          PrototypeALog.warn(TAG, '资源释放', 'source file close failed');
         }
       }
     }
@@ -90,12 +107,18 @@ export class FileService {
    */
   async copyMultipleImages(uris: string[]): Promise<CopyResult[]> {
     const results: CopyResult[] = [];
+    PrototypeALog.info(TAG, '批量复制', `start count=${uris.length}`);
 
-    for (const uri of uris) {
+    for (let index = 0; index < uris.length; index++) {
+      const uri = uris[index];
+      PrototypeALog.info(TAG, '批量复制',
+        `item start index=${index}, uriScheme=${PrototypeALog.uriScheme(uri)}`);
       const result = await this.copyImageToPrivate(uri);
       results.push(result);
+      PrototypeALog.info(TAG, '批量复制', `item complete index=${index}, success=${result.success}`);
     }
 
+    PrototypeALog.info(TAG, '批量复制', `complete count=${results.length}`);
     return results;
   }
 
@@ -108,7 +131,7 @@ export class FileService {
     } catch {
       // 目录不存在，创建
       await fileIo.mkdir(dirPath, true);
-      Logger.info(TAG, `Directory created: ${dirPath}`);
+      PrototypeALog.info(TAG, '文件复制', 'target directory created');
     }
   }
 

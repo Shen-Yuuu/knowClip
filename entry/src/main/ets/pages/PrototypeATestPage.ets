@@ -1,5 +1,5 @@
 import { router } from '@kit.ArkUI';
-import { Logger } from '../utils/Logger';
+import { PrototypeALog } from '../utils/PrototypeALog';
 import { DatabaseService } from '../services/DatabaseService';
 
 const TAG = 'PrototypeATestPage';
@@ -146,6 +146,8 @@ struct PrototypeATestPage {
     const timestamp = new Date().toLocaleTimeString();
     const logMessage = message ? `[${timestamp}] ${message}` : '';
     this.testLogs = [...this.testLogs, logMessage];
-    Logger.info(TAG, message);
+    if (message.length > 0) {
+      PrototypeALog.info(TAG, '测试页面', message);
+    }
   }
 }

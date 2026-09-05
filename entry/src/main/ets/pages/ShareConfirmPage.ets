@@ -1,6 +1,5 @@
 import { router } from '@kit.ArkUI';
 import { systemShare } from '@kit.ShareKit';
-import { Logger } from '../utils/Logger';
 import { ShareData, CopyResult } from '../models/ShareData';
 import {
   AttachmentInsertData,
@@ -9,6 +8,7 @@ import {
 } from '../services/DatabaseService';
 import { FileService } from '../services/FileService';
 import { ShareSessionService } from '../services/ShareSessionService';
+import { PrototypeALog } from '../utils/PrototypeALog';
 
 const TAG = 'ShareConfirmPage';
 const sharePageStorage = new LocalStorage();
@@ -26,11 +26,15 @@ struct ShareConfirmPage {
   @State canSave: boolean = true;
 
   aboutToAppear(): void {
-    Logger.info(TAG, `Received ${this.shareData.images.length} shared files`);
+    PrototypeALog.info(TAG, '确认页面',
+      `aboutToAppear images=${this.shareData.images.length}, ` +
+      `textLength=${this.shareData.text?.length ?? 0}, hasUrl=${this.shareData.url !== null}`);
     if (this.shareData.images.length === 0 && !this.shareData.text) {
       this.statusText = '⚠️ 未解析到可保存的分享内容';
+      PrototypeALog.warn(TAG, '确认页面', 'received empty share data; save disabled');
     } else {
       this.statusText = '✅ 分享内容已解析，请确认保存';
+      PrototypeALog.info(TAG, '确认页面', 'share data ready; save enabled');
     }
   }
 
@@ -163,38 +167,55 @@ struct ShareConfirmPage {
   }
 
   private async handleCancel(): Promise<void> {
-    Logger.info(TAG, 'User cancelled share');
+    PrototypeALog.info(TAG, '用户操作', 'cancel requested');
     const terminated =
       await ShareSessionService.getInstance().terminate(systemShare.ShareAbilityResultCode.BACK);
+    PrototypeALog.info(TAG, '用户操作', `cancel result sessionTerminated=${terminated}`);
     if (!terminated) {
+      PrototypeALog.warn(TAG, '会话关闭', 'no extension session; use router.back fallback');
       router.back();
     }
   }
 
   private async handleSave(): Promise<void> {
+    let phase = '开始保存';
     this.canSave = false;
     this.statusText = '🔄 正在复制并保存...';
+    PrototypeALog.info(TAG, '用户操作',
+      `save requested images=${this.shareData.images.length}, ` +
+      `textLength=${this.shareData.text?.length ?? 0}`);
 
     const context = this.getUIContext().getHostContext();
     if (!context) {
       this.statusText = '❌ 无法获取应用上下文';
       this.canSave = true;
+      PrototypeALog.error(TAG, '应用上下文', 'host context unavailable');
       return;
     }
+    PrototypeALog.info(TAG, '应用上下文', 'host context ready');
 
     try {
+      phase = '复制图片';
+      PrototypeALog.info(TAG, '文件复制', `batch start count=${this.shareData.images.length}`);
       const fileService = new FileService(context);
       const copyResults = await fileService.copyMultipleImages(this.shareData.images);
       const successfulCopies = this.countSuccessfulCopies(copyResults);
+      PrototypeALog.info(TAG, '文件复制',
+        `batch complete success=${successfulCopies}, total=${copyResults.length}`);
       if (this.shareData.images.length > 0 && successfulCopies === 0 && !this.shareData.text) {
         throw new Error('所有分享图片均复制失败');
       }
+
+      phase = '初始化数据库';
+      PrototypeALog.info(TAG, '数据库保存', 'database init start');
       const database = DatabaseService.getInstance();
       const initialized = await database.init(context);
       if (!initialized) {
         throw new Error('数据库初始化失败');
       }
+      PrototypeALog.info(TAG, '数据库保存', 'database init success');
 
+      phase = '写入知识条目';
       const knowledgeData: KnowledgeInsertData = {
         content: this.shareData.text,
         keywords: [],
@@ -206,23 +227,43 @@ struct ShareConfirmPage {
         imageCount: successfulCopies
       };
       const knowledgeId = await database.insertKnowledge(knowledgeData);
-      await this.saveAttachments(database, fileService, knowledgeId, copyResults);
+      PrototypeALog.info(TAG, '数据库保存', `knowledge inserted id=${knowledgeId}`);
 
+      phase = '写入附件';
+      await this.saveAttachments(database, fileService, knowledgeId, copyResults);
+      PrototypeALog.info(TAG, '数据库保存',
+        `attachments complete knowledgeId=${knowledgeId}, count=${successfulCopies}`);
+
+      phase = '完成保存';
       if (successfulCopies < this.shareData.images.length) {
         this.statusText =
           `⚠️ 已保存条目，图片成功 ${successfulCopies}/${this.shareData.images.length}`;
       } else {
         this.statusText = '✅ 已保存到本地收件箱';
       }
-      Logger.info(TAG, `Share saved as knowledge #${knowledgeId}`);
+      PrototypeALog.info(TAG, '保存结果',
+        `success knowledgeId=${knowledgeId}, images=${successfulCopies}/${this.shareData.images.length}`);
 
       setTimeout(() => {
-        ShareSessionService.getInstance().terminate(systemShare.ShareAbilityResultCode.CLOSE);
+        this.terminateAfterSave();
       }, 800);
-    } catch {
+    } catch (error) {
       this.statusText = '❌ 保存失败，请重试';
       this.canSave = true;
-      Logger.error(TAG, 'Failed to persist shared data');
+      const errorName = error instanceof Error ? error.name : 'UnknownError';
+      PrototypeALog.error(TAG, '保存结果', `failed phase=${phase}, errorType=${errorName}`);
+    }
+  }
+
+  private async terminateAfterSave(): Promise<void> {
+    try {
+      PrototypeALog.info(TAG, '会话关闭', 'delayed close requested');
+      const terminated =
+        await ShareSessionService.getInstance().terminate(systemShare.ShareAbilityResultCode.CLOSE);
+      PrototypeALog.info(TAG, '会话关闭', `delayed close result sessionTerminated=${terminated}`);
+    } catch (error) {
+      const errorName = error instanceof Error ? error.name : 'UnknownError';
+      PrototypeALog.error(TAG, '会话关闭', `delayed close failed errorType=${errorName}`);
     }
   }
 
@@ -241,9 +282,11 @@ struct ShareConfirmPage {
     for (let index = 0; index < results.length; index++) {
       const result = results[index];
       if (!result.success || result.localPath === null) {
+        PrototypeALog.warn(TAG, '附件写入', `skip index=${index}, copySuccess=${result.success}`);
         continue;
       }
 
+      PrototypeALog.info(TAG, '附件写入', `insert start index=${index}`);
       const attachmentData: AttachmentInsertData = {
         knowledgeId: knowledgeId,
         fileType: 'image',
@@ -253,6 +296,7 @@ struct ShareConfirmPage {
         fileSize: await fileService.getFileSize(result.localPath)
       };
       await database.insertAttachment(attachmentData);
+      PrototypeALog.info(TAG, '附件写入', `insert success index=${index}`);
     }
   }
 }

@@ -20,6 +20,8 @@ export class FileService {
    */
   async copyImageToPrivate(uri: string): Promise<CopyResult> {
     const startTime = Date.now();
+    let sourceFile: fileIo.File | null = null;
+    let targetFile: fileIo.File | null = null;
 
     try {
       // 生成目标路径
@@ -34,9 +36,11 @@ export class FileService {
       await this.ensureDirectory(targetDir);
 
       // 复制文件
-      Logger.info(TAG, `Copying ${uri} to ${targetPath}`);
-
-      await fileIo.copyFile(uri, targetPath);
+      Logger.info(TAG, `Copying shared image to ${targetPath}`);
+      sourceFile = await fileIo.open(uri, fileIo.OpenMode.READ_ONLY);
+      targetFile = await fileIo.open(targetPath,
+        fileIo.OpenMode.CREATE | fileIo.OpenMode.READ_WRITE | fileIo.OpenMode.TRUNC);
+      await fileIo.copyFile(sourceFile.fd, targetFile.fd);
 
       // 验证文件是否复制成功
       const stat = await fileIo.stat(targetPath);
@@ -63,6 +67,21 @@ export class FileService {
         localPath: null,
         error: errorMessage
       };
+    } finally {
+      if (targetFile !== null) {
+        try {
+          fileIo.closeSync(targetFile);
+        } catch {
+          Logger.warn(TAG, 'Failed to close target image file');
+        }
+      }
+      if (sourceFile !== null) {
+        try {
+          fileIo.closeSync(sourceFile);
+        } catch {
+          Logger.warn(TAG, 'Failed to close shared image file');
+        }
+      }
     }
   }
 

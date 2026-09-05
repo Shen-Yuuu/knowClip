@@ -1,5 +1,6 @@
 import { textRecognition } from '@kit.CoreVisionKit';
 import { image } from '@kit.ImageKit';
+import { fileIo } from '@kit.CoreFileKit';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { Logger } from '../utils/Logger';
 import { OCRResult, OCRError } from '../models/OCRResult';
@@ -29,8 +30,9 @@ export class OCRService {
     }
   }
 
-  async recognizeText(imagePath: string): Promise<OCRResult> {
+  async recognizeText(imageUri: string): Promise<OCRResult> {
     const startTime = Date.now();
+    let sourceFile: fileIo.File | null = null;
     let imageSource: image.ImageSource | null = null;
     let pixelMap: image.PixelMap | null = null;
 
@@ -39,7 +41,8 @@ export class OCRService {
         await this.init();
       }
 
-      imageSource = image.createImageSource(imagePath);
+      sourceFile = await fileIo.open(imageUri, fileIo.OpenMode.READ_ONLY);
+      imageSource = image.createImageSource(sourceFile.fd);
       const imageInfo = await imageSource.getImageInfo();
       const needResize =
         imageInfo.size.width > MAX_IMAGE_SIZE || imageInfo.size.height > MAX_IMAGE_SIZE;
@@ -99,6 +102,13 @@ export class OCRService {
           await imageSource.release();
         } catch {
           Logger.warn(TAG, 'Failed to release ImageSource');
+        }
+      }
+      if (sourceFile !== null) {
+        try {
+          fileIo.closeSync(sourceFile);
+        } catch {
+          Logger.warn(TAG, 'Failed to close OCR source image');
         }
       }
     }

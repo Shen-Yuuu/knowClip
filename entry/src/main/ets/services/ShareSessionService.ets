@@ -46,7 +46,7 @@ export class ShareSessionService {
     } catch (error) {
       const errorName = error instanceof Error ? error.name : 'UnknownError';
       PrototypeALog.error(TAG, '会话关闭', `terminate failed errorType=${errorName}`);
-      throw error;
+      throw new Error(errorName);
     }
   }
 }

@@ -11,9 +11,10 @@ import { ShareSessionService } from '../services/ShareSessionService';
 import { PrototypeALog } from '../utils/PrototypeALog';
 
 const TAG = 'ShareConfirmPage';
-const sharePageStorage = new LocalStorage();
 
-@Entry(sharePageStorage)
+// ShareExtAbility passes session-scoped data through loadContent().
+// Bind this page to that shared LocalStorage instead of creating an empty instance.
+@Entry({ useSharedStorage: true })
 @Component
 struct ShareConfirmPage {
   @LocalStorageLink('currentShareData') shareData: ShareData = {

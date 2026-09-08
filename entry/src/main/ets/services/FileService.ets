@@ -1,5 +1,6 @@
 import { fileIo } from '@kit.CoreFileKit';
 import { common } from '@kit.AbilityKit';
+import { BusinessError } from '@kit.BasicServicesKit';
 import { CopyResult } from '../models/ShareData';
 import { PrototypeALog } from '../utils/PrototypeALog';
 
@@ -35,7 +36,8 @@ export class FileService {
       const targetDir = `${this.context.filesDir}/attachments/${this.getYearMonth(timestamp)}`;
       const targetPath = `${targetDir}/${fileName}`;
 
-      // 确保目录存在
+      // 确保目录存在。fileIo.access() 在路径不存在时返回 false，而不是必然抛出异常。
+      phase = '准备目标目录';
       await this.ensureDirectory(targetDir);
       PrototypeALog.info(TAG, '文件复制', 'target directory ready');
 
@@ -72,10 +74,12 @@ export class FileService {
 
     } catch (error) {
       const duration = Date.now() - startTime;
+      const businessError = error as BusinessError;
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       const errorName = error instanceof Error ? error.name : 'UnknownError';
       PrototypeALog.error(TAG, '文件复制',
-        `single failed phase=${phase}, errorType=${errorName}, duration=${duration}ms`);
+        `single failed phase=${phase}, errorType=${errorName}, ` +
+        `errorCode=${businessError.code}, duration=${duration}ms`);
 
       return {
         success: false,
@@ -126,13 +130,14 @@ export class FileService {
    * 确保目录存在
    */
   private async ensureDirectory(dirPath: string): Promise<void> {
-    try {
-      await fileIo.access(dirPath);
-    } catch {
-      // 目录不存在，创建
-      await fileIo.mkdir(dirPath, true);
-      PrototypeALog.info(TAG, '文件复制', 'target directory created');
+    const exists = await fileIo.access(dirPath);
+    if (exists) {
+      PrototypeALog.info(TAG, '文件复制', 'target directory already exists');
+      return;
     }
+
+    await fileIo.mkdir(dirPath, true);
+    PrototypeALog.info(TAG, '文件复制', 'target directory created');
   }
 
   /**
